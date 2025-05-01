@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -40,6 +41,8 @@ const PartnerEarnings = () => {
     setStats(null);
     
     try {
+      console.log("Searching for partner code:", values.partnerCode);
+      
       // Get the first day of the current month
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -49,9 +52,23 @@ const PartnerEarnings = () => {
         .from('users')
         .select('id, name, username')
         .eq('partner_code', values.partnerCode)
-        .single();
+        .maybeSingle();
       
-      if (userError || !userData) {
+      console.log("User data response:", userData, userError);
+      
+      if (userError) {
+        console.error("Error finding user:", userError);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "An error occurred while looking up the partner code.",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!userData) {
+        console.log("No user found with partner code:", values.partnerCode);
         toast({
           variant: "destructive",
           title: "Error",
@@ -68,7 +85,10 @@ const PartnerEarnings = () => {
         .eq('user_id', userData.id)
         .gte('created_at', firstDayOfMonth.toISOString());
       
+      console.log("Click data response:", clickData, clickError);
+      
       if (clickError) {
+        console.error("Error fetching clicks:", clickError);
         toast({
           variant: "destructive",
           title: "Error",
