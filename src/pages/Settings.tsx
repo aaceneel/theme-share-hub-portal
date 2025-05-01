@@ -37,6 +37,7 @@ const Settings = () => {
   const { toast } = useToast();
   const { profile, refreshProfile } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmittingCode, setIsSubmittingCode] = useState(false);
   
   const profileForm = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -159,14 +160,16 @@ const Settings = () => {
     if (!profile) return;
     
     try {
+      setIsSubmittingCode(true);
+      
       // Check if the referral code exists
       const { data: referrerData, error: referrerError } = await supabase
         .from('users')
-        .select('id')
+        .select('id, partner_code')
         .eq('partner_code', data.referralCode)
-        .single();
+        .maybeSingle();
       
-      if (referrerError || !referrerData) {
+      if (!referrerData || referrerError) {
         toast({
           title: "Error",
           description: "Invalid partner code. Please check and try again.",
@@ -196,16 +199,17 @@ const Settings = () => {
       if (error) throw error;
       
       // Add 500 bonus clicks for the referrer
-      for (let i = 0; i < 500; i++) {
-        await supabase
-          .from('clicks')
-          .insert({
-            user_id: profile.id,
-            source_user_id: referrerData.id,
-            type: 'bonus',
-            ip_address: '127.0.0.1',
-            user_agent: 'SYSTEM_BONUS_CLICKS'
-          });
+      const batchSize = 50;
+      for (let i = 0; i < 500; i += batchSize) {
+        const clicksToInsert = Array.from({ length: Math.min(batchSize, 500 - i) }, () => ({
+          user_id: profile.id,
+          source_user_id: referrerData.id,
+          type: 'bonus',
+          ip_address: '127.0.0.1',
+          user_agent: 'SYSTEM_BONUS_CLICKS'
+        }));
+        
+        await supabase.from('clicks').insert(clicksToInsert);
       }
       
       await refreshProfile();
@@ -214,6 +218,8 @@ const Settings = () => {
         title: "Success!",
         description: "Partner code has been added successfully.",
       });
+      
+      referralForm.reset();
     } catch (error: any) {
       console.error('Error adding referral code:', error);
       toast({
@@ -221,6 +227,8 @@ const Settings = () => {
         description: error.message || "Failed to add partner code. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmittingCode(false);
     }
   };
 
@@ -363,9 +371,9 @@ const Settings = () => {
                 
                 <Button
                   type="submit"
-                  disabled={referralForm.formState.isSubmitting}
+                  disabled={isSubmittingCode}
                 >
-                  {referralForm.formState.isSubmitting ? 'Submitting...' : 'Submit Code'}
+                  {isSubmittingCode ? 'Submitting...' : 'Submit Code'}
                 </Button>
               </form>
             </div>
